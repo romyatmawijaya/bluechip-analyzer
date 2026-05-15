@@ -15,10 +15,20 @@ saham_list = {
     "GOTO.JK": "GoTo Gojek Tokopedia"
 }
 
-st.title("📊 Analisis Saham Bluechip Indonesia")
-st.write("Pilih saham untuk lihat grafik dan harga terakhir 1 bulan terakhir")
+periode_list = {
+    "1mo": "1 Bulan",
+    "3mo": "3 Bulan",
+    "6mo": "6 Bulan",
+    "1y": "1 Tahun",
+    "2y": "2 Tahun",
+    "5y": "5 Tahun",
+    "max": "Semua Data"
+}
 
-col1, col2 = st.columns([2, 1])
+st.title("📊 Analisis Saham Bluechip Indonesia")
+st.write("Pilih saham dan periode untuk lihat grafik dan harga terakhir")
+
+col1, col2, col3 = st.columns([2, 1.5, 1])
 
 with col1:
     saham_pilih = st.selectbox(
@@ -28,6 +38,14 @@ with col1:
     )
 
 with col2:
+    periode_pilih = st.selectbox(
+        "Pilih Periode",
+        options=list(periode_list.keys()),
+        format_func=lambda x: periode_list[x],
+        index=0
+    )
+
+with col3:
     st.write("")
     st.write("")
     tombol = st.button("Analisis", use_container_width=True)
@@ -35,7 +53,7 @@ with col2:
 if tombol:
     try:
         with st.spinner("Mengambil data..."):
-            data = yf.download(saham_pilih, period="1mo", interval="1d")
+            data = yf.download(saham_pilih, period=periode_pilih, interval="1d")
 
         if data.empty:
             st.error("Data tidak ditemukan untuk saham ini.")
@@ -62,7 +80,7 @@ if tombol:
             )])
 
             fig.update_layout(
-                title=f"Grafik {saham_pilih.replace('.JK','')} - 1 Bulan",
+                title=f"Grafik {saham_pilih.replace('.JK','')} - {periode_list[periode_pilih]}",
                 xaxis_title="Tanggal",
                 yaxis_title="Harga (Rp)",
                 xaxis_rangeslider_visible=False,
