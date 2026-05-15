@@ -410,13 +410,13 @@ with tab2:
             st.session_state.df_scan = df
 
             def handle_click():
-                if 'df_scan' in st.session_state:
-                    selected_rows = st.session_state.df_selected.rows
-                    if selected_rows:
-                        idx = selected_rows[0]
-                        saham_klik = st.session_state.df_scan.iloc[idx]['Ticker']
-                        st.session_state.saham_pilih = saham_klik
-                        st.rerun()
+                # Pakai.get() biar gak error kalau belum ada
+                df_state = st.session_state.get("df_selected")
+                if df_state and hasattr(df_state, "selection") and df_state.selection.rows:
+                    idx = df_state.selection.rows[0]
+                    saham_klik = st.session_state.df_scan.iloc[idx]['Ticker']
+                    st.session_state.saham_pilih = saham_klik
+                    st.rerun()
 
             st.subheader("🟢 BUY")
             df_buy = df[df['Rekomendasi'] == 'BUY']
@@ -439,8 +439,6 @@ with tab2:
                     df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                     use_container_width=True,
                     hide_index=True,
-                    on_select=handle_click,
-                    selection_mode="single-row",
                     key="df_selected2"
                 )
 
@@ -451,8 +449,6 @@ with tab2:
                     df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                     use_container_width=True,
                     hide_index=True,
-                    on_select=handle_click,
-                    selection_mode="single-row",
                     key="df_selected3"
                 )
 
@@ -463,8 +459,6 @@ with tab2:
                     df_hold[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Buy', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                     use_container_width=True,
                     hide_index=True,
-                    on_select=handle_click,
-                    selection_mode="single-row",
                     key="df_selected4"
                 )
 
