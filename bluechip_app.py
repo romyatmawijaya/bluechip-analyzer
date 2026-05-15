@@ -7,12 +7,19 @@ st.set_page_config(page_title="Analisis Saham Bluechip", layout="wide")
 saham_list = {
     "BBCA.JK": "Bank Central Asia",
     "BBRI.JK": "Bank Rakyat Indonesia",
-    "BBNI.JK": "Bank Negara Indonesia",
     "BMRI.JK": "Bank Mandiri",
+    "BBNI.JK": "Bank Negara Indonesia",
     "TLKM.JK": "Telkom Indonesia",
     "ASII.JK": "Astra International",
     "UNVR.JK": "Unilever Indonesia",
-    "GOTO.JK": "GoTo Gojek Tokopedia"
+    "ICBP.JK": "Indofood CBP",
+    "KLBF.JK": "Kalbe Farma",
+    "INDF.JK": "Indofood Sukses Makmur",
+    "SMGR.JK": "Semen Indonesia",
+    "UNTR.JK": "United Tractors",
+    "ADRO.JK": "Adaro Energy",
+    "ANTM.JK": "Aneka Tambang",
+    "MDKA.JK": "Merdeka Copper Gold"
 }
 
 periode_list = {
