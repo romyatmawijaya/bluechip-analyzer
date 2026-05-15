@@ -58,7 +58,6 @@ def hitung_estimasi_waktu(data, target_persen):
     return int(estimasi_hari), (int(hari_min), int(hari_max))
 
 def get_berita_saham(nama_saham, ticker):
-    """Ambil 3 berita terbaru dari web"""
     try:
         query = f"{nama_saham} {ticker.replace('.JK','')} saham berita terbaru"
         result = subprocess.run([
@@ -79,6 +78,50 @@ def get_berita_saham(nama_saham, ticker):
         return berita
     except:
         return []
+
+def hitung_level_harga(data, rekomendasi):
+    """Hitung level potensial buy, sell, SL, TP"""
+    harga_terakhir = data['Close'].iloc[-1].item()
+    ema20 = data['EMA20'].iloc[-1].item()
+    ema50 = data['EMA50'].iloc[-1].item()
+    support = data['Low'].rolling(20).min().iloc[-1].item()
+    resistance = data['High'].rolling(20).max().iloc[-1].item()
+
+    # Default level
+    pot_buy = pot_sell = cut_loss = take_profit = None
+
+    if rekomendasi == "HOLD" and ema20 < ema50:
+        # Potential BUY = area support atau EMA20 kalau mau crossover
+        pot_buy = min(support * 1.02, ema20 * 0.98)
+        cut_loss = support * 0.97 # SL 3% di bawah support
+        take_profit = resistance * 0.98 # TP 2% di bawah resistance
+
+    elif rekomendasi == "HOLD" and ema20 > ema50:
+        # Potential SELL = area resistance
+        pot_sell = max(resistance * 0.98, ema20 * 1.02)
+        cut_loss = support * 0.97
+        take_profit = harga_terakhir * 1.05 # TP 5% dari harga sekarang
+
+    elif rekomendasi == "SELL":
+        pot_sell = harga_terakhir * 1.01 # Jual saat rebound kecil
+        cut_loss = harga_terakhir * 1.03 # SL 3% kalau salah arah
+        take_profit = support * 0.98
+
+    elif rekomendasi == "BUY":
+        pot_buy = harga_terakhir # Buy sekarang
+        cut_loss = support * 0.97
+        take_profit = resistance * 0.98
+
+    elif rekomendasi == "WASPADA":
+        cut_loss = harga_terakhir * 0.95 # SL ketat 5%
+        take_profit = harga_terakhir * 1.03 # TP kecil 3%
+
+    return {
+        "Pot_Buy": round(pot_buy) if pot_buy else None,
+        "Pot_Sell": round(pot_sell) if pot_sell else None,
+        "Cut_Loss": round(cut_loss) if cut_loss else None,
+        "Take_Profit": round(take_profit) if take_profit else None
+    }
 
 def analisis_saham(symbol, period):
     try:
@@ -103,7 +146,6 @@ def analisis_saham(symbol, period):
         ema50 = data['EMA50'].iloc[-1].item()
         rsi = data['RSI'].iloc[-1].item()
 
-        # Logika rekomendasi + alasan detail
         if harga_terakhir > ema20 and ema20 > ema50:
             if jarak_high >= 95 or rsi >= 70:
                 rekomendasi = "WASPADA"
@@ -111,16 +153,18 @@ def analisis_saham(symbol, period):
                 warna = "orange"
             else:
                 rekomendasi = "BUY"
-                alasan = f"Harga Rp {harga_terakhir:,.0f} di atas EMA20. EMA20 {ema20:,.0f} > EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan momentum naik masih sehat."
+                alasan = f"Harga Rp {harga_terakhir:,.0f} di atas EMA20. EMA20 {ema20:,.0f} > EMA50 {ema50:,.0f}. RSI {rsi:.1f} momentum naik sehat."
                 warna = "green"
         elif harga_terakhir < ema20 and ema20 < ema50:
             rekomendasi = "SELL"
-            alasan = f"Harga Rp {harga_terakhir:,.0f} di bawah EMA20. EMA20 {ema20:,.0f} < EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan tekanan jual."
+            alasan = f"Harga Rp {harga_terakhir:,.0f} di bawah EMA20. EMA20 {ema20:,.0f} < EMA50 {ema50:,.0f}. RSI {rsi:.1f} tekanan jual."
             warna = "red"
         else:
             rekomendasi = "HOLD"
-            alasan = f"Harga Rp {harga_terakhir:,.0f} berada di area EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan pasar sideways."
+            alasan = f"Harga Rp {harga_terakhir:,.0f} di area EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f} pasar sideways."
             warna = "orange"
+
+        levels = hitung_level_harga(data, rekomendasi)
 
         return {
             "Saham": symbol.replace('.JK', ''),
@@ -130,7 +174,8 @@ def analisis_saham(symbol, period):
             "RSI": f"{rsi:.1f}",
             "Rekomendasi": rekomendasi,
             "Alasan": alasan,
-            "Warna": warna
+            "Warna": warna,
+            **levels
         }
     except:
         return None
@@ -188,7 +233,6 @@ with tab1:
             ema50 = data['EMA50'].iloc[-1].item()
             rsi = data['RSI'].iloc[-1].item()
 
-            # Logika rekomendasi
             if harga_terakhir > ema20 and ema20 > ema50:
                 if jarak_high >= 95 or rsi >= 70:
                     rekomendasi = "⚠️ WASPADA"
@@ -206,6 +250,8 @@ with tab1:
                 rekomendasi = "🟡 HOLD"
                 alasan = f"Harga bergerak sideways di sekitar EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f}. Tunggu konfirmasi arah."
                 warna = "orange"
+
+            levels = hitung_level_harga(data, rekomendasi.replace("🟢 ", "").replace("🔴 ", "").replace("⚠️ ", "").replace("🟡 ", ""))
 
             # Tampilkan metrik
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
@@ -236,10 +282,26 @@ with tab1:
 
             st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
 
-            # Box alasan detail
             with st.expander("📝 Lihat Alasan Lengkap", expanded=True):
                 st.write(alasan)
                 st.caption(f"EMA20: Rp {ema20:,.0f} | EMA50: Rp {ema50:,.0f}")
+
+            # Box level harga baru
+            if levels["Pot_Buy"] or levels["Pot_Sell"]:
+                st.subheader("🎯 Level Harga")
+                col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+                with col_l1:
+                    if levels["Pot_Buy"]:
+                        st.metric("Potential Buy", f"Rp {levels['Pot_Buy']:,.0f}")
+                with col_l2:
+                    if levels["Pot_Sell"]:
+                        st.metric("Potential Sell", f"Rp {levels['Pot_Sell']:,.0f}")
+                with col_l3:
+                    if levels["Cut_Loss"]:
+                        st.metric("Cut Loss", f"Rp {levels['Cut_Loss']:,.0f}", delta=f"{((levels['Cut_Loss']/harga_terakhir)-1)*100:.1f}%")
+                with col_l4:
+                    if levels["Take_Profit"]:
+                        st.metric("Take Profit", f"Rp {levels['Take_Profit']:,.0f}", delta=f"{((levels['Take_Profit']/harga_terakhir)-1)*100:.1f}%")
 
             # Estimasi waktu target
             est_5_up, range_5_up = hitung_estimasi_waktu(data, 5)
@@ -321,7 +383,7 @@ with tab2:
             st.subheader("🟢 BUY")
             df_buy = df[df['Rekomendasi'] == 'BUY']
             if not df_buy.empty:
-                st.dataframe(df_buy[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
+                st.dataframe(df_buy[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Buy', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                             use_container_width=True, hide_index=True)
             else:
                 st.info("Tidak ada saham BUY saat ini.")
@@ -329,13 +391,19 @@ with tab2:
             st.subheader("⚠️ WASPADA")
             df_waspada = df[df['Rekomendasi'] == 'WASPADA']
             if not df_waspada.empty:
-                st.dataframe(df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
+                st.dataframe(df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                             use_container_width=True, hide_index=True)
 
             st.subheader("🔴 SELL")
             df_sell = df[df['Rekomendasi'] == 'SELL']
             if not df_sell.empty:
-                st.dataframe(df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
+                st.dataframe(df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
+                            use_container_width=True, hide_index=True)
+
+            st.subheader("🟡 HOLD")
+            df_hold = df[df['Rekomendasi'] == 'HOLD']
+            if not df_hold.empty:
+                st.dataframe(df_hold[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Buy', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
                             use_container_width=True, hide_index=True)
 
         progress_bar.empty()
