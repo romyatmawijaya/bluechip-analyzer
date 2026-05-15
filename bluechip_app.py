@@ -5,7 +5,6 @@ import numpy as np
 
 st.set_page_config(page_title="Saham Scanner v2", layout="wide")
 st.title("📊 Scanner Saham BUY & SELL v2")
-st.caption("Nambah kolom estimasi hari ke TP dan level koreksi")
 
 DAFTAR_SAHAM = [
     "BBCA.JK", "BBRI.JK", "BMRI.JK", "TLKM.JK", "ASII.JK",
@@ -23,7 +22,6 @@ def cek_saham(ticker, periode):
         if len(hist) < 50:
             return None
         
-        # Data dasar
         harga = hist['Close'].iloc[-1]
         support = hist['Low'].rolling(20).min().iloc[-1]
         resistance = hist['High'].rolling(20).max().iloc[-1]
@@ -32,7 +30,7 @@ def cek_saham(ticker, periode):
         avg_vol = hist['Volume'].rolling(20).mean().iloc[-1]
         vol = hist['Volume'].iloc[-1]
         
-        # Hitung ATR buat estimasi volatilitas harian
+        # Hitung ATR buat estimasi
         high_low = hist['High'] - hist['Low']
         high_close = np.abs(hist['High'] - hist['Close'].shift())
         low_close = np.abs(hist['Low'] - hist['Close'].shift())
@@ -45,7 +43,7 @@ def cek_saham(ticker, periode):
         estimasi_minus5 = max(1, int(round(5 / avg_move_pct)))
         estimasi_minus10 = max(1, int(round(10 / avg_move_pct)))
         
-        # Sinyal BUY
+        # Sinyal BUY - struktur lama tetap sama, tinggal tambah di belakang
         if (harga > sma20.iloc[-1] and sma20.iloc[-1] > sma50.iloc[-1] and 
             harga > support * 1.02 and vol > avg_vol * 1.5):
             return {
@@ -54,15 +52,15 @@ def cek_saham(ticker, periode):
                 "TP": round(resistance, 2),
                 "SL": round(support, 2),
                 "Potensial Buy": round(harga, 2),
+                # Tambahan baru di bawah ini
                 "Buy -5%": round(harga * 0.95, 2),
                 "Buy -10%": round(harga * 0.90, 2),
-                "Estimasi TP": f"~{estimasi_normal} hari",
-                "Estimasi -5%": f"~{estimasi_minus5} hari",
-                "Estimasi -10%": f"~{estimasi_minus10} hari",
-                "Vol": f"{avg_move_pct:.1f}%/hari"
+                "Est TP": f"{estimasi_normal}h",
+                "Est -5%": f"{estimasi_minus5}h",
+                "Est -10%": f"{estimasi_minus10}h"
             }
         
-        # Sinyal SELL
+        # Sinyal SELL - struktur lama tetap
         elif (harga < sma20.iloc[-1] and sma20.iloc[-1] < sma50.iloc[-1] and 
               harga < resistance * 0.98 and vol > avg_vol * 1.5):
             return {
@@ -73,10 +71,9 @@ def cek_saham(ticker, periode):
                 "Potensial Buy": "-",
                 "Buy -5%": "-",
                 "Buy -10%": "-",
-                "Estimasi TP": "-",
-                "Estimasi -5%": "-",
-                "Estimasi -10%": "-",
-                "Vol": f"{avg_move_pct:.1f}%/hari"
+                "Est TP": "-",
+                "Est -5%": "-",
+                "Est -10%": "-"
             }
     except:
         return None
@@ -104,6 +101,3 @@ if st.button("🔍 Scan Sekarang"):
                 st.dataframe(df_sell, use_container_width=True)
         else:
             st.warning("Gak ada sinyal kuat periode ini")
-
-st.markdown("---")
-st.caption("Estimasi hari pakai ATR 14. Bukan saran finansial ya.")
