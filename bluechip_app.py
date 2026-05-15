@@ -382,7 +382,7 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
 
 with tab2:
-    st.write("Scan otomatis 15 saham. Pilih periode untuk screening.")
+    st.write("Scan otomatis 15 saham. Klik baris tabel untuk buka analisis detailnya.")
     col1, col2 = st.columns([2, 1])
     with col1:
         periode_scan = st.selectbox(
@@ -407,13 +407,16 @@ with tab2:
 
         if hasil:
             df = pd.DataFrame(hasil)
+            st.session_state.df_scan = df
 
-            def handle_click(df_clicked):
-                if df_clicked.selection.rows:
-                    idx = df_clicked.selection.rows[0]
-                    saham_klik = df.iloc[idx]['Ticker']
-                    st.session_state.saham_pilih = saham_klik
-                    st.rerun()
+            def handle_click():
+                if 'df_scan' in st.session_state:
+                    selected_rows = st.session_state.df_selected.rows
+                    if selected_rows:
+                        idx = selected_rows[0]
+                        saham_klik = st.session_state.df_scan.iloc[idx]['Ticker']
+                        st.session_state.saham_pilih = saham_klik
+                        st.rerun()
 
             st.subheader("🟢 BUY")
             df_buy = df[df['Rekomendasi'] == 'BUY']
@@ -423,7 +426,8 @@ with tab2:
                     use_container_width=True,
                     hide_index=True,
                     on_select=handle_click,
-                    selection_mode="single-row"
+                    selection_mode="single-row",
+                    key="df_selected"
                 )
             else:
                 st.info("Tidak ada saham BUY saat ini.")
@@ -436,7 +440,8 @@ with tab2:
                     use_container_width=True,
                     hide_index=True,
                     on_select=handle_click,
-                    selection_mode="single-row"
+                    selection_mode="single-row",
+                    key="df_selected2"
                 )
 
             st.subheader("🔴 SELL")
@@ -447,7 +452,8 @@ with tab2:
                     use_container_width=True,
                     hide_index=True,
                     on_select=handle_click,
-                    selection_mode="single-row"
+                    selection_mode="single-row",
+                    key="df_selected3"
                 )
 
             st.subheader("🟡 HOLD")
@@ -458,7 +464,8 @@ with tab2:
                     use_container_width=True,
                     hide_index=True,
                     on_select=handle_click,
-                    selection_mode="single-row"
+                    selection_mode="single-row",
+                    key="df_selected4"
                 )
 
         progress_bar.empty()
