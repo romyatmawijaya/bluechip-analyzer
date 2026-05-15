@@ -8,12 +8,31 @@ st.set_page_config(page_title="Bluechip Stock Analyzer", layout="wide")
 st.title("📊 Bluechip Stock Analyzer")
 st.write("Cek performa saham bluechip Indonesia + sinyal teknikal sederhana")
 
-saham_list = {
-    "BBCA": "Bank Central Asia",
-    "BBRI": "Bank Rakyat Indonesia",
-    "BMRI": "Bank Mandiri",
-    "TLKM": "Telkom Indonesia",
-    "ASII": "Astra International"
+SAHAM_LIST = {
+    # Big Banks
+    'BBCA.JK': 'Bank Central Asia',
+    'BBRI.JK': 'Bank BRI',
+    'BMRI.JK': 'Bank Mandiri',
+    'BBNI.JK': 'Bank Negara Indonesia',
+
+    # Big Telco & Tech
+    'TLKM.JK': 'Telkom Indonesia',
+    'GOTO.JK': 'GoTo Gojek Tokopedia',
+
+    # Consumer Goods
+    'UNVR.JK': 'Unilever Indonesia',
+    'ICBP.JK': 'Indofood CBP',
+    'INDF.JK': 'Indofood Sukses Makmur',
+
+    # Cigarette & Retail
+    'HMSP.JK': 'H.M. Sampoerna',
+    'GGRM.JK': 'Gudang Garam',
+    'ACES.JK': 'Ace Hardware Indonesia',
+
+    # Mining & Energy
+    'ASII.JK': 'Astra International',
+    'ADRO.JK': 'Adaro Energy',
+    'PGAS.JK': 'Perusahaan Gas Negara'
 }
 
 def hitung_rsi(data, periode=14):
