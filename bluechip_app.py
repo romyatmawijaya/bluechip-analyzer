@@ -64,8 +64,8 @@ if st.button("Analisis"):
             st.plotly_chart(fig, use_container_width=True)
 
             # Tampilkan data terakhir
-            harga_terakhir = data['Close'].iloc[-1]
-            harga_sebelumnya = data['Close'].iloc[-2]
+            harga_terakhir = data['Close'].iloc[-1].item()
+            harga_sebelumnya = data['Close'].iloc[-2].item()
             perubahan = harga_terakhir - harga_sebelumnya
             persen_perubahan = (perubahan / harga_sebelumnya) * 100
 
