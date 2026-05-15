@@ -3,6 +3,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import subprocess
 
 st.set_page_config(page_title="Analisis Saham Bluechip", layout="wide")
 
@@ -41,26 +42,43 @@ def hitung_rsi(data, periode=14):
     return rsi
 
 def hitung_estimasi_waktu(data, target_persen):
-    """Estimasi hari untuk capai target berdasarkan return harian historis"""
     returns = data['Close'].pct_change().dropna()
-    avg_return = returns.mean()
-    std_return = returns.std()
-
+    if len(returns) == 0:
+        return None, None
+    avg_return = returns.mean().item()
+    std_return = returns.std().item()
     if abs(avg_return) < 0.0001:
         return None, None
-
-    # Estimasi hari = ln(1+target) / avg_return
     target_decimal = target_persen / 100
     estimasi_hari = np.log(1 + target_decimal) / avg_return
-
-    # Range +/- 1 std deviasi
-    hari_min = np.log(1 + target_decimal) / (avg_return + std_return)
-    hari_max = np.log(1 + target_decimal) / max(avg_return - std_return, 0.0001)
-
     if estimasi_hari < 0 or estimasi_hari > 365:
         return None, None
-
+    hari_min = np.log(1 + target_decimal) / (avg_return + std_return)
+    hari_max = np.log(1 + target_decimal) / max(avg_return - std_return, 0.0001)
     return int(estimasi_hari), (int(hari_min), int(hari_max))
+
+def get_berita_saham(nama_saham, ticker):
+    """Ambil 3 berita terbaru dari web"""
+    try:
+        query = f"{nama_saham} {ticker.replace('.JK','')} saham berita terbaru"
+        result = subprocess.run([
+            "python", "-c",
+            f"import requests; from bs4 import BeautifulSoup; "
+            f"r=requests.get('https://www.google.com/search?q={query}&tbm=nws', headers={{'User-Agent':'Mozilla/5.0'}}); "
+            f"s=BeautifulSoup(r.text,'html.parser'); "
+            f"items=[(a.get_text(),a['href']) for a in s.select('a[href^=\"/url?q=\"]')[:3]]; "
+            f"print('\\n'.join([f'{{t}}|{{u}}' for t,u in items]))"
+        ], capture_output=True, text=True, timeout=10)
+        lines = result.stdout.strip().split('\n')
+        berita = []
+        for line in lines:
+            if '|' in line:
+                title, url = line.split('|', 1)
+                if title and 'google' not in url:
+                    berita.append({"judul": title, "url": url})
+        return berita
+    except:
+        return []
 
 def analisis_saham(symbol, period):
     try:
@@ -85,30 +103,23 @@ def analisis_saham(symbol, period):
         ema50 = data['EMA50'].iloc[-1].item()
         rsi = data['RSI'].iloc[-1].item()
 
-        # Hitung estimasi waktu
-        est_5_up, range_5_up = hitung_estimasi_waktu(data, 5)
-        est_10_up, range_10_up = hitung_estimasi_waktu(data, 10)
-        est_15_up, range_15_up = hitung_estimasi_waktu(data, 15)
-        est_5_down, range_5_down = hitung_estimasi_waktu(data, -5)
-        est_10_down, range_10_down = hitung_estimasi_waktu(data, -10)
-        est_15_down, range_15_down = hitung_estimasi_waktu(data, -15)
-
+        # Logika rekomendasi + alasan detail
         if harga_terakhir > ema20 and ema20 > ema50:
             if jarak_high >= 95 or rsi >= 70:
                 rekomendasi = "WASPADA"
-                alasan = f"Trend naik tapi RSI {rsi:.1f} overbought / harga {jarak_high:.1f}% dari ATH."
+                alasan = f"Harga di atas EMA20 & EMA50, tapi RSI {rsi:.1f} overbought dan harga {jarak_high:.1f}% dari ATH. Risiko koreksi tinggi."
                 warna = "orange"
             else:
                 rekomendasi = "BUY"
-                alasan = f"Trend naik kuat. EMA20 > EMA50. RSI {rsi:.1f} masih sehat."
+                alasan = f"Harga Rp {harga_terakhir:,.0f} di atas EMA20. EMA20 {ema20:,.0f} > EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan momentum naik masih sehat."
                 warna = "green"
         elif harga_terakhir < ema20 and ema20 < ema50:
             rekomendasi = "SELL"
-            alasan = f"Trend turun. EMA20 < EMA50. RSI {rsi:.1f}."
+            alasan = f"Harga Rp {harga_terakhir:,.0f} di bawah EMA20. EMA20 {ema20:,.0f} < EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan tekanan jual."
             warna = "red"
         else:
             rekomendasi = "HOLD"
-            alasan = f"Trend sideways. RSI {rsi:.1f}."
+            alasan = f"Harga Rp {harga_terakhir:,.0f} berada di area EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f} menunjukkan pasar sideways."
             warna = "orange"
 
         return {
@@ -119,13 +130,7 @@ def analisis_saham(symbol, period):
             "RSI": f"{rsi:.1f}",
             "Rekomendasi": rekomendasi,
             "Alasan": alasan,
-            "Warna": warna,
-            "Est_5_Up": est_5_up, "Range_5_Up": range_5_up,
-            "Est_10_Up": est_10_up, "Range_10_Up": range_10_up,
-            "Est_15_Up": est_15_up, "Range_15_Up": range_15_up,
-            "Est_5_Down": est_5_down, "Range_5_Down": range_5_down,
-            "Est_10_Down": est_10_down, "Range_10_Down": range_10_down,
-            "Est_15_Down": est_15_down, "Range_15_Down": range_15_down
+            "Warna": warna
         }
     except:
         return None
@@ -135,8 +140,6 @@ st.title("📊 Analisis Saham Bluechip Indonesia")
 tab1, tab2 = st.tabs(["Analisis Detail", "Scan Semua Saham"])
 
 with tab1:
-    st.write("Pilih saham dan periode untuk lihat grafik, harga, dan rekomendasi")
-
     col1, col2, col3 = st.columns([2, 1.5, 1])
     with col1:
         saham_pilih = st.selectbox(
@@ -146,7 +149,7 @@ with tab1:
         )
     with col2:
         periode_pilih = st.selectbox(
-            "Pilih Periode",
+            "Periode",
             options=list(periode_list.keys()),
             format_func=lambda x: periode_list[x],
             index=3
@@ -157,8 +160,9 @@ with tab1:
         tombol = st.button("Analisis", use_container_width=True, type="primary")
 
     if tombol:
-        with st.spinner("Mengambil data..."):
+        with st.spinner("Mengambil data & berita..."):
             data = yf.download(saham_pilih, period=periode_pilih, interval="1d")
+            berita = get_berita_saham(saham_list[saham_pilih], saham_pilih)
 
         if data.empty or len(data) < 50:
             st.error("Data tidak cukup untuk analisis. Coba pilih periode lebih panjang.")
@@ -192,15 +196,15 @@ with tab1:
                     warna = "orange"
                 else:
                     rekomendasi = "🟢 BUY"
-                    alasan = f"Trend naik kuat. EMA20 > EMA50. RSI {rsi:.1f} masih sehat."
+                    alasan = f"Harga di atas EMA20 & EMA50. EMA20 memotong EMA50 ke atas. RSI {rsi:.1f} belum overbought. Momentum bullish."
                     warna = "green"
             elif harga_terakhir < ema20 and ema20 < ema50:
                 rekomendasi = "🔴 SELL"
-                alasan = f"Trend turun. EMA20 < EMA50. RSI {rsi:.1f}."
+                alasan = f"Harga di bawah EMA20 & EMA50. EMA20 memotong EMA50 ke bawah. RSI {rsi:.1f} menunjukkan tekanan jual."
                 warna = "red"
             else:
                 rekomendasi = "🟡 HOLD"
-                alasan = f"Trend sideways. RSI {rsi:.1f}. Tunggu konfirmasi."
+                alasan = f"Harga bergerak sideways di sekitar EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f}. Tunggu konfirmasi arah."
                 warna = "orange"
 
             # Tampilkan metrik
@@ -210,14 +214,34 @@ with tab1:
             with col_m2:
                 st.metric("Perubahan Periode", f"{persen_periode:+.2f}%", f"Rp {perubahan_periode:,.0f}")
             with col_m3:
-                st.metric("Volume", f"{volume_terakhir/1000000:.1f}jt", f"{(volume_terakhir/volume_rata):.1f}x rata2 20 hari")
+                st.metric("Volume", f"{volume_terakhir/1000000:.1f}jt", f"{(volume_terakhir/volume_rata):.1f}x rata2")
             with col_m4:
-                st.metric("RSI 14", f"{rsi:.1f}", f"High: Rp {harga_tertinggi:,.0f}")
+                st.metric("RSI 14", f"{rsi:.1f}", f"{'Overbought' if rsi >= 70 else 'Oversold' if rsi <= 30 else 'Netral'}")
+
+            # Box High Low 1 Tahun
+            st.markdown("---")
+            col_h1, col_h2 = st.columns(2)
+            with col_h1:
+                st.markdown("**📈 Harga Tertinggi 1 Tahun**")
+                st.markdown(f"<h2 style='color:#00C853; margin:0;'>Rp {harga_tertinggi:,.0f}</h2>", unsafe_allow_html=True)
+            with col_h2:
+                st.markdown("**📉 Harga Terendah 1 Tahun**")
+                st.markdown(f"<h2 style='color:#D32F2F; margin:0;'>Rp {harga_terendah:,.0f}</h2>", unsafe_allow_html=True)
+
+            st.markdown(f"**Posisi Sekarang: {jarak_high:.1f}% dari ATH**")
+            st.progress(min(jarak_high / 100, 1.0))
+
+            if jarak_high >= 95:
+                st.warning(f"Harga sudah dekat ATH. Hanya {100-jarak_high:.1f}% lagi ke Rp {harga_tertinggi:,.0f}")
 
             st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
-            st.caption(alasan)
 
-            # Estimasi waktu target naik & turun
+            # Box alasan detail
+            with st.expander("📝 Lihat Alasan Lengkap", expanded=True):
+                st.write(alasan)
+                st.caption(f"EMA20: Rp {ema20:,.0f} | EMA50: Rp {ema50:,.0f}")
+
+            # Estimasi waktu target
             est_5_up, range_5_up = hitung_estimasi_waktu(data, 5)
             est_10_up, range_10_up = hitung_estimasi_waktu(data, 10)
             est_15_up, range_15_up = hitung_estimasi_waktu(data, 15)
@@ -227,28 +251,23 @@ with tab1:
 
             if est_5_up or est_5_down:
                 st.subheader("📈 Estimasi Waktu Capai Target")
-
                 col_t1, col_t2 = st.columns(2)
-
                 with col_t1:
                     st.markdown("**Target Naik**")
-                    if est_5_up:
-                        st.metric("Naik 5%", f"±{est_5_up} hari", f"Range {range_5_up[0]}-{range_5_up[1]} hari")
-                    if est_10_up:
-                        st.metric("Naik 10%", f"±{est_10_up} hari", f"Range {range_10_up[0]}-{range_10_up[1]} hari")
-                    if est_15_up:
-                        st.metric("Naik 15%", f"±{est_15_up} hari", f"Range {range_15_up[0]}-{range_15_up[1]} hari")
-
+                    if est_5_up: st.metric("Naik 5%", f"±{est_5_up} hari", f"{range_5_up[0]}-{range_5_up[1]} hari")
+                    if est_10_up: st.metric("Naik 10%", f"±{est_10_up} hari", f"{range_10_up[0]}-{range_10_up[1]} hari")
+                    if est_15_up: st.metric("Naik 15%", f"±{est_15_up} hari", f"{range_15_up[0]}-{range_15_up[1]} hari")
                 with col_t2:
                     st.markdown("**Target Turun / Stop Loss**")
-                    if est_5_down:
-                        st.metric("Turun 5%", f"±{est_5_down} hari", f"Range {range_5_down[0]}-{range_5_down[1]} hari")
-                    if est_10_down:
-                        st.metric("Turun 10%", f"±{est_10_down} hari", f"Range {range_10_down[0]}-{range_10_down[1]} hari")
-                    if est_15_down:
-                        st.metric("Turun 15%", f"±{est_15_down} hari", f"Range {range_15_down[0]}-{range_15_down[1]} hari")
+                    if est_5_down: st.metric("Turun 5%", f"±{est_5_down} hari", f"{range_5_down[0]}-{range_5_down[1]} hari")
+                    if est_10_down: st.metric("Turun 10%", f"±{est_10_down} hari", f"{range_10_down[0]}-{range_10_down[1]} hari")
+                    if est_15_down: st.metric("Turun 15%", f"±{est_15_down} hari", f"{range_15_down[0]}-{range_15_down[1]} hari")
 
-                st.caption("Estimasi berdasarkan rata-rata return harian historis. Bukan jaminan. Pakai untuk manajemen risiko.")
+            # Berita terbaru
+            if berita:
+                st.subheader("📰 Berita Terbaru")
+                for b in berita:
+                    st.markdown(f"- [{b['judul']}]({b['url']})")
 
             # Grafik
             fig = go.Figure(data=[
@@ -258,7 +277,11 @@ with tab1:
                     increasing_line_color='green', decreasing_line_color='red', name='Harga'
                 ),
                 go.Scatter(x=data.index, y=data['EMA20'], line=dict(color='blue', width=1.5), name='EMA 20'),
-                go.Scatter(x=data.index, y=data['EMA50'], line=dict(color='orange', width=1.5), name='EMA 50')
+                go.Scatter(x=data.index, y=data['EMA50'], line=dict(color='orange', width=1.5), name='EMA 50'),
+                go.Scatter(x=[data.index[0], data.index[-1]], y=[harga_tertinggi, harga_tertinggi],
+                          line=dict(color='green', width=1, dash='dash'), name='High 1Y'),
+                go.Scatter(x=[data.index[0], data.index[-1]], y=[harga_terendah, harga_terendah],
+                          line=dict(color='red', width=1, dash='dash'), name='Low 1Y')
             ])
             fig.update_layout(
                 title=f"Grafik {saham_pilih.replace('.JK','')} - {periode_list[periode_pilih]}",
@@ -295,11 +318,10 @@ with tab2:
 
         if hasil:
             df = pd.DataFrame(hasil)
-
             st.subheader("🟢 BUY")
             df_buy = df[df['Rekomendasi'] == 'BUY']
             if not df_buy.empty:
-                st.dataframe(df_buy[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI']],
+                st.dataframe(df_buy[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
                             use_container_width=True, hide_index=True)
             else:
                 st.info("Tidak ada saham BUY saat ini.")
@@ -307,13 +329,13 @@ with tab2:
             st.subheader("⚠️ WASPADA")
             df_waspada = df[df['Rekomendasi'] == 'WASPADA']
             if not df_waspada.empty:
-                st.dataframe(df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI']],
+                st.dataframe(df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
                             use_container_width=True, hide_index=True)
 
             st.subheader("🔴 SELL")
             df_sell = df[df['Rekomendasi'] == 'SELL']
             if not df_sell.empty:
-                st.dataframe(df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI']],
+                st.dataframe(df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Alasan']],
                             use_container_width=True, hide_index=True)
 
         progress_bar.empty()
