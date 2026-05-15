@@ -5,6 +5,7 @@ import numpy as np
 
 st.set_page_config(page_title="Saham Scanner v2", layout="wide")
 st.title("📊 Scanner Saham BUY & SELL v2")
+st.caption("Mode Longgar - biar ada hasil buat test kolom baru")
 
 DAFTAR_SAHAM = [
     "BBCA.JK", "BBRI.JK", "BMRI.JK", "TLKM.JK", "ASII.JK",
@@ -19,7 +20,7 @@ def cek_saham(ticker, periode):
     try:
         saham = yf.Ticker(ticker)
         hist = saham.history(period=periode, interval="1d")
-        if len(hist) < 50:
+        if len(hist) < 30:
             return None
         
         harga = hist['Close'].iloc[-1]
@@ -43,16 +44,15 @@ def cek_saham(ticker, periode):
         estimasi_minus5 = max(1, int(round(5 / avg_move_pct)))
         estimasi_minus10 = max(1, int(round(10 / avg_move_pct)))
         
-        # Sinyal BUY - struktur lama tetap sama, tinggal tambah di belakang
-        if (harga > sma20.iloc[-1] and sma20.iloc[-1] > sma50.iloc[-1] and 
-            harga > support * 1.02 and vol > avg_vol * 1.5):
+        # KRITERIA LONGGAR - biar gampang ada hasil
+        # Cukup harga > sma20 dan volume naik 1.2x
+        if (harga > sma20.iloc[-1] and vol > avg_vol * 1.2):
             return {
                 "Saham": ticker.replace(".JK", ""),
                 "Harga": round(harga, 2),
                 "TP": round(resistance, 2),
                 "SL": round(support, 2),
                 "Potensial Buy": round(harga, 2),
-                # Tambahan baru di bawah ini
                 "Buy -5%": round(harga * 0.95, 2),
                 "Buy -10%": round(harga * 0.90, 2),
                 "Est TP": f"{estimasi_normal}h",
@@ -60,9 +60,8 @@ def cek_saham(ticker, periode):
                 "Est -10%": f"{estimasi_minus10}h"
             }
         
-        # Sinyal SELL - struktur lama tetap
-        elif (harga < sma20.iloc[-1] and sma20.iloc[-1] < sma50.iloc[-1] and 
-              harga < resistance * 0.98 and vol > avg_vol * 1.5):
+        # KRITERIA SELL LONGGAR
+        elif (harga < sma20.iloc[-1] and vol > avg_vol * 1.2):
             return {
                 "Saham": ticker.replace(".JK", ""),
                 "Harga": round(harga, 2),
@@ -75,7 +74,7 @@ def cek_saham(ticker, periode):
                 "Est -5%": "-",
                 "Est -10%": "-"
             }
-    except:
+    except Exception as e:
         return None
     return None
 
@@ -100,4 +99,7 @@ if st.button("🔍 Scan Sekarang"):
                 st.subheader("🔴 Rekomendasi SELL")
                 st.dataframe(df_sell, use_container_width=True)
         else:
-            st.warning("Gak ada sinyal kuat periode ini")
+            st.warning("Masih kosong. Coba ganti periode ke 1 Bulan atau tambah saham di DAFTAR_SAHAM")
+
+st.markdown("---")
+st.caption("Catatan: Ini mode longgar buat test. Jangan dipake buat trading beneran ya.")
