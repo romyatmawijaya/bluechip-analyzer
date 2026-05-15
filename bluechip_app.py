@@ -42,19 +42,38 @@ def hitung_rsi(data, periode=14):
     return rsi
 
 def hitung_estimasi_waktu(data, target_persen):
+    """Estimasi hari untuk capai target berdasarkan return harian historis"""
     returns = data['Close'].pct_change().dropna()
+
     if len(returns) == 0:
         return None, None
+
     avg_return = returns.mean().item()
     std_return = returns.std().item()
+
     if abs(avg_return) < 0.0001:
         return None, None
+
     target_decimal = target_persen / 100
+
+    # Fix: Kalau target turun dan avg_return positif, pakai volatilitas sebagai estimasi
+    if target_persen < 0 and avg_return > 0:
+        if std_return > 0:
+            estimasi_hari = abs(target_decimal) / std_return
+            hari_min = estimasi_hari * 0.5
+            hari_max = estimasi_hari * 2
+            return int(estimasi_hari), (int(hari_min), int(hari_max))
+        else:
+            return None, None
+
     estimasi_hari = np.log(1 + target_decimal) / avg_return
+
     if estimasi_hari < 0 or estimasi_hari > 365:
         return None, None
+
     hari_min = np.log(1 + target_decimal) / (avg_return + std_return)
     hari_max = np.log(1 + target_decimal) / max(avg_return - std_return, 0.0001)
+
     return int(estimasi_hari), (int(hari_min), int(hari_max))
 
 def get_berita_saham(nama_saham, ticker):
@@ -80,41 +99,37 @@ def get_berita_saham(nama_saham, ticker):
         return []
 
 def hitung_level_harga(data, rekomendasi):
-    """Hitung level potensial buy, sell, SL, TP"""
     harga_terakhir = data['Close'].iloc[-1].item()
     ema20 = data['EMA20'].iloc[-1].item()
     ema50 = data['EMA50'].iloc[-1].item()
     support = data['Low'].rolling(20).min().iloc[-1].item()
     resistance = data['High'].rolling(20).max().iloc[-1].item()
 
-    # Default level
     pot_buy = pot_sell = cut_loss = take_profit = None
 
     if rekomendasi == "HOLD" and ema20 < ema50:
-        # Potential BUY = area support atau EMA20 kalau mau crossover
         pot_buy = min(support * 1.02, ema20 * 0.98)
-        cut_loss = support * 0.97 # SL 3% di bawah support
-        take_profit = resistance * 0.98 # TP 2% di bawah resistance
+        cut_loss = support * 0.97
+        take_profit = resistance * 0.98
 
     elif rekomendasi == "HOLD" and ema20 > ema50:
-        # Potential SELL = area resistance
         pot_sell = max(resistance * 0.98, ema20 * 1.02)
         cut_loss = support * 0.97
-        take_profit = harga_terakhir * 1.05 # TP 5% dari harga sekarang
+        take_profit = harga_terakhir * 1.05
 
     elif rekomendasi == "SELL":
-        pot_sell = harga_terakhir * 1.01 # Jual saat rebound kecil
-        cut_loss = harga_terakhir * 1.03 # SL 3% kalau salah arah
+        pot_sell = harga_terakhir * 1.01
+        cut_loss = harga_terakhir * 1.03
         take_profit = support * 0.98
 
     elif rekomendasi == "BUY":
-        pot_buy = harga_terakhir # Buy sekarang
+        pot_buy = harga_terakhir
         cut_loss = support * 0.97
         take_profit = resistance * 0.98
 
     elif rekomendasi == "WASPADA":
-        cut_loss = harga_terakhir * 0.95 # SL ketat 5%
-        take_profit = harga_terakhir * 1.03 # TP kecil 3%
+        cut_loss = harga_terakhir * 0.95
+        take_profit = harga_terakhir * 1.03
 
     return {
         "Pot_Buy": round(pot_buy) if pot_buy else None,
@@ -253,7 +268,6 @@ with tab1:
 
             levels = hitung_level_harga(data, rekomendasi.replace("🟢 ", "").replace("🔴 ", "").replace("⚠️ ", "").replace("🟡 ", ""))
 
-            # Tampilkan metrik
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             with col_m1:
                 st.metric("Harga Terakhir", f"Rp {harga_terakhir:,.0f}", f"{perubahan_harian:,.0f} ({persen_harian:.2f}%)")
@@ -264,7 +278,6 @@ with tab1:
             with col_m4:
                 st.metric("RSI 14", f"{rsi:.1f}", f"{'Overbought' if rsi >= 70 else 'Oversold' if rsi <= 30 else 'Netral'}")
 
-            # Box High Low 1 Tahun
             st.markdown("---")
             col_h1, col_h2 = st.columns(2)
             with col_h1:
@@ -286,7 +299,6 @@ with tab1:
                 st.write(alasan)
                 st.caption(f"EMA20: Rp {ema20:,.0f} | EMA50: Rp {ema50:,.0f}")
 
-            # Box level harga baru
             if levels["Pot_Buy"] or levels["Pot_Sell"]:
                 st.subheader("🎯 Level Harga")
                 col_l1, col_l2, col_l3, col_l4 = st.columns(4)
@@ -303,7 +315,6 @@ with tab1:
                     if levels["Take_Profit"]:
                         st.metric("Take Profit", f"Rp {levels['Take_Profit']:,.0f}", delta=f"{((levels['Take_Profit']/harga_terakhir)-1)*100:.1f}%")
 
-            # Estimasi waktu target
             est_5_up, range_5_up = hitung_estimasi_waktu(data, 5)
             est_10_up, range_10_up = hitung_estimasi_waktu(data, 10)
             est_15_up, range_15_up = hitung_estimasi_waktu(data, 15)
@@ -325,13 +336,11 @@ with tab1:
                     if est_10_down: st.metric("Turun 10%", f"±{est_10_down} hari", f"{range_10_down[0]}-{range_10_down[1]} hari")
                     if est_15_down: st.metric("Turun 15%", f"±{est_15_down} hari", f"{range_15_down[0]}-{range_15_down[1]} hari")
 
-            # Berita terbaru
             if berita:
                 st.subheader("📰 Berita Terbaru")
                 for b in berita:
                     st.markdown(f"- [{b['judul']}]({b['url']})")
 
-            # Grafik
             fig = go.Figure(data=[
                 go.Candlestick(
                     x=data.index, open=data['Open'], high=data['High'],
