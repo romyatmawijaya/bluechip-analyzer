@@ -56,10 +56,17 @@ if tombol:
         if data.empty or len(data) < 50:
             st.error("Data tidak cukup untuk analisis. Coba pilih periode lebih panjang.")
         else:
+            # Data dasar
             harga_terakhir = data['Close'].iloc[-1].item()
-            harga_sebelumnya = data['Close'].iloc[-2].item()
-            perubahan = harga_terakhir - harga_sebelumnya
-            persen_perubahan = (perubahan / harga_sebelumnya) * 100
+            harga_awal = data['Close'].iloc[0].item()
+            harga_tertinggi = data['High'].max().item()
+            harga_terendah = data['Low'].min().item()
+
+            perubahan_harian = harga_terakhir - data['Close'].iloc[-2].item()
+            persen_harian = (perubahan_harian / data['Close'].iloc[-2].item()) * 100
+
+            perubahan_periode = harga_terakhir - harga_awal
+            persen_periode = (perubahan_periode / harga_awal) * 100
 
             # Hitung Moving Average
             data['MA20'] = data['Close'].rolling(window=20).mean()
@@ -82,16 +89,31 @@ if tombol:
                 alasan = "Trend sideways/tidak jelas. Tunggu konfirmasi arah."
                 warna = "orange"
 
-            col_m1, col_m2 = st.columns(2)
+            # Tampilkan metrik
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
             with col_m1:
                 st.metric(
                     label="Harga Terakhir",
                     value=f"Rp {harga_terakhir:,.0f}",
-                    delta=f"{perubahan:,.0f} ({persen_perubahan:.2f}%)"
+                    delta=f"{perubahan_harian:,.0f} ({persen_harian:.2f}%)"
                 )
+
             with col_m2:
-                st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
-                st.caption(alasan)
+                st.metric(
+                    label="Perubahan Periode",
+                    value=f"{persen_periode:+.2f}%",
+                    delta=f"Rp {perubahan_periode:,.0f}"
+                )
+
+            with col_m3:
+                st.metric(label="Harga Tertinggi", value=f"Rp {harga_tertinggi:,.0f}")
+
+            with col_m4:
+                st.metric(label="Harga Terendah", value=f"Rp {harga_terendah:,.0f}")
+
+            st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
+            st.caption(alasan)
 
             # Grafik lengkap
             fig = go.Figure(data=[
@@ -122,3 +144,5 @@ if tombol:
 
     except Exception as e:
         st.error(f"Terjadi error: {e}")
+
+st.caption("⚠️ Rekomendasi ini berdasarkan Moving Average sederhana. Bukan nasihat keuangan.")
