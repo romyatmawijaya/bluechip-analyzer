@@ -188,7 +188,6 @@ tab1, tab2 = st.tabs(["Analisis Detail", "Scan Semua Saham"])
 with tab1:
     col1, col2, col3 = st.columns([2, 1.5, 1])
     with col1:
-        # Pakai session_state biar bisa di-set dari tab scan
         if 'saham_pilih' not in st.session_state:
             st.session_state.saham_pilih = "BBCA.JK"
 
@@ -238,7 +237,6 @@ with tab1:
             ema50 = data['EMA50'].iloc[-1].item()
             rsi = data['RSI'].iloc[-1].item()
 
-            # Bandingin harga Des 2019, Feb 2020, Sekarang
             try:
                 harga_des2019 = data.loc[:'2019-12-31']['Close'].iloc[-1].item()
                 harga_feb2020 = data.loc[:'2020-02-29']['Close'].iloc[-1].item()
@@ -259,4 +257,210 @@ with tab1:
                 pass
 
             if harga_terakhir > ema20 and ema20 > ema50:
-                if jarak
+                if jarak_high >= 95 or rsi >= 70:
+                    rekomendasi = "⚠️ WASPADA"
+                    alasan = f"Trend naik tapi RSI {rsi:.1f} overbought / harga {jarak_high:.1f}% dari ATH. Risiko koreksi."
+                    warna = "orange"
+                else:
+                    rekomendasi = "🟢 BUY"
+                    alasan = f"Harga di atas EMA20 & EMA50. EMA20 memotong EMA50 ke atas. RSI {rsi:.1f} belum overbought. Momentum bullish."
+                    warna = "green"
+            elif harga_terakhir < ema20 and ema20 < ema50:
+                harga_terendah_2th = data['Low'].min().item()
+                jarak_dari_low = ((harga_terakhir - harga_terendah_2th) / harga_terendah_2th) * 100
+                if rsi <= 35 and jarak_dari_low <= 8:
+                    rekomendasi = "🟢 BUY"
+                    alasan = f"Oversold RSI {rsi:.1f} + harga cuma {jarak_dari_low:.1f}% di atas low 2 tahun Rp {harga_terendah_2th:,.0f}. Area akumulasi."
+                    warna = "green"
+                else:
+                    rekomendasi = "🔴 SELL"
+                    alasan = f"Harga di bawah EMA20 & EMA50. EMA20 memotong EMA50 ke bawah. RSI {rsi:.1f} menunjukkan tekanan jual."
+                    warna = "red"
+            else:
+                rekomendasi = "🟡 HOLD"
+                alasan = f"Harga bergerak sideways di sekitar EMA20 {ema20:,.0f} dan EMA50 {ema50:,.0f}. RSI {rsi:.1f}. Tunggu konfirmasi arah."
+                warna = "orange"
+
+            levels = hitung_level_harga(data, rekomendasi.replace("🟢 ", "").replace("🔴 ", "").replace("⚠️ ", "").replace("🟡 ", ""))
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            with col_m1:
+                st.metric("Harga Terakhir", f"Rp {harga_terakhir:,.0f}", f"{perubahan_harian:,.0f} ({persen_harian:.2f}%)")
+            with col_m2:
+                st.metric("Perubahan Periode", f"{persen_periode:+.2f}%", f"Rp {perubahan_periode:,.0f}")
+            with col_m3:
+                st.metric("Volume", f"{volume_terakhir/1000000:.1f}jt", f"{(volume_terakhir/volume_rata):.1f}x rata2")
+            with col_m4:
+                st.metric("RSI 14", f"{rsi:.1f}", f"{'Overbought' if rsi >= 70 else 'Oversold' if rsi <= 30 else 'Netral'}")
+
+            st.markdown("---")
+            col_h1, col_h2 = st.columns(2)
+            with col_h1:
+                st.markdown("**📈 Harga Tertinggi 1 Tahun**")
+                st.markdown(f"<h2 style='color:#00C853; margin:0;'>Rp {harga_tertinggi:,.0f}</h2>", unsafe_allow_html=True)
+            with col_h2:
+                st.markdown("**📉 Harga Terendah 1 Tahun**")
+                st.markdown(f"<h2 style='color:#D32F2F; margin:0;'>Rp {harga_terendah:,.0f}</h2>", unsafe_allow_html=True)
+
+            st.markdown(f"**Posisi Sekarang: {jarak_high:.1f}% dari ATH**")
+            st.progress(min(jarak_high / 100, 1.0))
+
+            if jarak_high >= 95:
+                st.warning(f"Harga sudah dekat ATH. Hanya {100-jarak_high:.1f}% lagi ke Rp {harga_tertinggi:,.0f}")
+
+            st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
+
+            with st.expander("📝 Lihat Alasan Lengkap", expanded=True):
+                st.write(alasan)
+                st.caption(f"EMA20: Rp {ema20:,.0f} | EMA50: Rp {ema50:,.0f}")
+
+            if levels["Pot_Buy"] or levels["Pot_Sell"]:
+                st.subheader("🎯 Level Harga")
+                col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+                with col_l1:
+                    if levels["Pot_Buy"]:
+                        st.metric("Potential Buy", f"Rp {levels['Pot_Buy']:,.0f}")
+                with col_l2:
+                    if levels["Pot_Sell"]:
+                        st.metric("Potential Sell", f"Rp {levels['Pot_Sell']:,.0f}")
+                with col_l3:
+                    if levels["Cut_Loss"]:
+                        st.metric("Cut Loss", f"Rp {levels['Cut_Loss']:,.0f}", delta=f"{((levels['Cut_Loss']/harga_terakhir)-1)*100:.1f}%")
+                with col_l4:
+                    if levels["Take_Profit"]:
+                        st.metric("Take Profit", f"Rp {levels['Take_Profit']:,.0f}", delta=f"{((levels['Take_Profit']/harga_terakhir)-1)*100:.1f}%")
+
+            est_5_up, range_5_up = hitung_estimasi_waktu(data, 5)
+            est_10_up, range_10_up = hitung_estimasi_waktu(data, 10)
+            est_15_up, range_15_up = hitung_estimasi_waktu(data, 15)
+            est_5_down, range_5_down = hitung_estimasi_waktu(data, -5)
+            est_10_down, range_10_down = hitung_estimasi_waktu(data, -10)
+            est_15_down, range_15_down = hitung_estimasi_waktu(data, -15)
+
+            if est_5_up or est_5_down:
+                st.subheader("📈 Estimasi Waktu Capai Target")
+                col_t1, col_t2 = st.columns(2)
+                with col_t1:
+                    st.markdown("**Target Naik**")
+                    if est_5_up: st.metric("Naik 5%", f"±{est_5_up} hari", f"{range_5_up[0]}-{range_5_up[1]} hari")
+                    if est_10_up: st.metric("Naik 10%", f"±{est_10_up} hari", f"{range_10_up[0]}-{range_10_up[1]} hari")
+                    if est_15_up: st.metric("Naik 15%", f"±{est_15_up} hari", f"{range_15_up[0]}-{range_15_up[1]} hari")
+                with col_t2:
+                    st.markdown("**Target Turun / Stop Loss**")
+                    if est_5_down: st.metric("Turun 5%", f"±{est_5_down} hari", f"{range_5_down[0]}-{range_5_down[1]} hari")
+                    if est_10_down: st.metric("Turun 10%", f"±{est_10_down} hari", f"{range_10_down[0]}-{range_10_down[1]} hari")
+                    if est_15_down: st.metric("Turun 15%", f"±{est_15_down} hari", f"{range_15_down[0]}-{range_15_down[1]} hari")
+
+            if berita:
+                st.subheader("📰 Berita Terbaru")
+                for b in berita:
+                    st.markdown(f"- [{b['judul']}]({b['url']})")
+
+            fig = go.Figure(data=[
+                go.Candlestick(
+                    x=data.index, open=data['Open'], high=data['High'],
+                    low=data['Low'], close=data['Close'],
+                    increasing_line_color='green', decreasing_line_color='red', name='Harga'
+                ),
+                go.Scatter(x=data.index, y=data['EMA20'], line=dict(color='blue', width=1.5), name='EMA 20'),
+                go.Scatter(x=data.index, y=data['EMA50'], line=dict(color='orange', width=1.5), name='EMA 50'),
+                go.Scatter(x=[data.index[0], data.index[-1]], y=[harga_tertinggi, harga_tertinggi],
+                          line=dict(color='green', width=1, dash='dash'), name='High 1Y'),
+                go.Scatter(x=[data.index[0], data.index[-1]], y=[harga_terendah, harga_terendah],
+                          line=dict(color='red', width=1, dash='dash'), name='Low 1Y')
+            ])
+
+            fig.add_vline(x="2020-03-01", line_width=1, line_dash="dot", line_color="gray")
+            fig.add_annotation(x="2020-03-01", y=0.95, yref="paper", text="Covid Crash",
+                              showarrow=False, textangle=-90, font=dict(size=10, color="gray"))
+
+            fig.update_layout(
+                title=f"Grafik {saham_pilih.replace('.JK','')} - {periode_list[periode_pilih]}",
+                xaxis_title="Tanggal", yaxis_title="Harga (Rp)",
+                xaxis_rangeslider_visible=False, height=550
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    st.write("Scan otomatis 15 saham. Pilih periode untuk screening.")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        periode_scan = st.selectbox(
+            "Periode Screening",
+            options=list(periode_list.keys()),
+            format_func=lambda x: periode_list[x],
+            index=7,
+            key="scan_period"
+        )
+
+    if st.button("🔍 Scan Sekarang", use_container_width=True, type="primary"):
+        hasil = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        for i, symbol in enumerate(saham_list.keys()):
+            status_text.text(f"Scanning {symbol.replace('.JK', '')}...")
+            hasil_analisis = analisis_saham(symbol, periode_scan)
+            if hasil_analisis:
+                hasil.append(hasil_analisis)
+            progress_bar.progress((i + 1) / len(saham_list))
+        status_text.text("Selesai!")
+
+        if hasil:
+            df = pd.DataFrame(hasil)
+
+            def handle_click(df_clicked):
+                if df_clicked.selection.rows:
+                    idx = df_clicked.selection.rows[0]
+                    saham_klik = df.iloc[idx]['Ticker']
+                    st.session_state.saham_pilih = saham_klik
+                    st.rerun()
+
+            st.subheader("🟢 BUY")
+            df_buy = df[df['Rekomendasi'] == 'BUY']
+            if not df_buy.empty:
+                st.dataframe(
+                    df_buy[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Buy', 'Cut_Loss', 'Take_Profit', 'Alasan']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select=handle_click,
+                    selection_mode="single-row"
+                )
+            else:
+                st.info("Tidak ada saham BUY saat ini.")
+
+            st.subheader("⚠️ WASPADA")
+            df_waspada = df[df['Rekomendasi'] == 'WASPADA']
+            if not df_waspada.empty:
+                st.dataframe(
+                    df_waspada[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Cut_Loss', 'Take_Profit', 'Alasan']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select=handle_click,
+                    selection_mode="single-row"
+                )
+
+            st.subheader("🔴 SELL")
+            df_sell = df[df['Rekomendasi'] == 'SELL']
+            if not df_sell.empty:
+                st.dataframe(
+                    df_sell[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select=handle_click,
+                    selection_mode="single-row"
+                )
+
+            st.subheader("🟡 HOLD")
+            df_hold = df[df['Rekomendasi'] == 'HOLD']
+            if not df_hold.empty:
+                st.dataframe(
+                    df_hold[['Saham', 'Harga', 'Perubahan', 'Volume', 'RSI', 'Pot_Buy', 'Pot_Sell', 'Cut_Loss', 'Take_Profit', 'Alasan']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select=handle_click,
+                    selection_mode="single-row"
+                )
+
+        progress_bar.empty()
+
+st.caption("⚠️ Ini analisis teknikal sederhana. Bukan nasihat keuangan. Selalu cek fundamental & berita.")
