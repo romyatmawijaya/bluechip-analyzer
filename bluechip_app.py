@@ -1,4 +1,4 @@
-import streamlit as st
+6import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
@@ -8,7 +8,7 @@ st.set_page_config(page_title="Bluechip Stock Analyzer", layout="wide")
 st.title("📊 Bluechip Stock Analyzer")
 st.write("Cek performa saham bluechip Indonesia + sinyal teknikal sederhana")
 
-SAHAM_LIST = {
+saham_list = {
     # Big Banks
     'BBCA.JK': 'Bank Central Asia',
     'BBRI.JK': 'Bank BRI',
