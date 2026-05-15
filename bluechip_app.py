@@ -101,4 +101,140 @@ with tab1:
             data = yf.download(saham_pilih, period=periode_pilih, interval="1d")
 
         if data.empty or len(data) < 50:
-            st.error("
+            st.error("Data tidak cukup untuk analisis. Coba pilih periode lebih panjang.")
+        else:
+            harga_terakhir = data['Close'].iloc[-1].item()
+            harga_awal = data['Close'].iloc[0].item()
+            harga_tertinggi = data['High'].max().item()
+            harga_terendah = data['Low'].min().item()
+
+            perubahan_harian = harga_terakhir - data['Close'].iloc[-2].item()
+            persen_harian = (perubahan_harian / data['Close'].iloc[-2].item()) * 100
+
+            perubahan_periode = harga_terakhir - harga_awal
+            persen_periode = (perubahan_periode / harga_awal) * 100
+
+            data['MA20'] = data['Close'].rolling(window=20).mean()
+            data['MA50'] = data['Close'].rolling(window=50).mean()
+
+            ma20 = data['MA20'].iloc[-1].item()
+            ma50 = data['MA50'].iloc[-1].item()
+
+            if harga_terakhir > ma20 and ma20 > ma50:
+                rekomendasi = "🟢 BUY"
+                alasan = "Harga di atas MA20 dan MA20 di atas MA50. Trend naik kuat."
+                warna = "green"
+            elif harga_terakhir < ma20 and ma20 < ma50:
+                rekomendasi = "🔴 SELL"
+                alasan = "Harga di bawah MA20 dan MA20 di bawah MA50. Trend turun."
+                warna = "red"
+            else:
+                rekomendasi = "🟡 HOLD"
+                alasan = "Trend sideways/tidak jelas. Tunggu konfirmasi arah."
+                warna = "orange"
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
+            with col_m1:
+                st.metric(
+                    label="Harga Terakhir",
+                    value=f"Rp {harga_terakhir:,.0f}",
+                    delta=f"{perubahan_harian:,.0f} ({persen_harian:.2f}%)"
+                )
+
+            with col_m2:
+                st.metric(
+                    label="Perubahan Periode",
+                    value=f"{persen_periode:+.2f}%",
+                    delta=f"Rp {perubahan_periode:,.0f}"
+                )
+
+            with col_m3:
+                st.metric(label="Harga Tertinggi", value=f"Rp {harga_tertinggi:,.0f}")
+
+            with col_m4:
+                st.metric(label="Harga Terendah", value=f"Rp {harga_terendah:,.0f}")
+
+            st.markdown(f"### Rekomendasi: <span style='color:{warna}'>{rekomendasi}</span>", unsafe_allow_html=True)
+            st.caption(alasan)
+
+            fig = go.Figure(data=[
+                go.Candlestick(
+                    x=data.index,
+                    open=data['Open'],
+                    high=data['High'],
+                    low=data['Low'],
+                    close=data['Close'],
+                    increasing_line_color='green',
+                    decreasing_line_color='red',
+                    name='Harga'
+                ),
+                go.Scatter(x=data.index, y=data['MA20'], line=dict(color='blue', width=1.5), name='MA 20'),
+                go.Scatter(x=data.index, y=data['MA50'], line=dict(color='orange', width=1.5), name='MA 50')
+            ])
+
+            fig.update_layout(
+                title=f"Grafik {saham_pilih.replace('.JK','')} - {periode_list[periode_pilih]}",
+                xaxis_title="Tanggal",
+                yaxis_title="Harga (Rp)",
+                xaxis_rangeslider_visible=False,
+                height=550,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+with tab2:
+    st.write("Scan otomatis 15 saham. Pilih periode untuk screening.")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        periode_scan = st.selectbox(
+            "Periode Screening",
+            options=list(periode_list.keys()),
+            format_func=lambda x: periode_list[x],
+            index=3,
+            key="scan_period"
+        )
+
+    if st.button("🔍 Scan Sekarang", use_container_width=True, type="primary"):
+        hasil = []
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        for i, symbol in enumerate(saham_list.keys()):
+            status_text.text(f"Scanning {symbol.replace('.JK', '')}...")
+            hasil_analisis = analisis_saham(symbol, periode_scan)
+            if hasil_analisis:
+                hasil.append(hasil_analisis)
+            progress_bar.progress((i + 1) / len(saham_list))
+
+        status_text.text("Selesai!")
+
+        if hasil:
+            df = pd.DataFrame(hasil)
+
+            st.subheader("🟢 Rekomendasi BUY")
+            df_buy = df[df['Rekomendasi'] == 'BUY']
+            if not df_buy.empty:
+                st.dataframe(
+                    df_buy[['Saham', 'Harga', 'Perubahan']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("Tidak ada saham dengan rekomendasi BUY saat ini.")
+
+            st.subheader("🟡 Rekomendasi HOLD")
+            df_hold = df[df['Rekomendasi'] == 'HOLD']
+            if not df_hold.empty:
+                st.dataframe(df_hold[['Saham', 'Harga', 'Perubahan']], use_container_width=True, hide_index=True)
+
+            st.subheader("🔴 Rekomendasi SELL")
+            df_sell = df[df['Rekomendasi'] == 'SELL']
+            if not df_sell.empty:
+                st.dataframe(df_sell[['Saham', 'Harga', 'Perubahan']], use_container_width=True, hide_index=True)
+
+        progress_bar.empty()
+
+st.caption("⚠️ Rekomendasi ini berdasarkan Moving Average sederhana. Bukan nasihat keuangan.")
